@@ -1,0 +1,162 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # SINGLE POSTGRESQL DATABASE (All-in-one)
+  # Contains: Dagster system tables, source data, warehouse data
+  # ============================================
+  source_postgresql:
+    image: postgres:15
+    container_name: source_postgresql
+    environment:
+      POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+    ports:
+      - "${DAGSTER_POSTGRES_PORT}:5432"
+    volumes:
+      - source-postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres-init/source:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DAGSTER_POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - dagster-network
+
+  # ============================================
+  # DAGSTER USER CODE (gRPC server)
+  # ============================================
+  dagster_user_code:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dagster_user_code
+    image: ${DAGSTER_CURRENT_IMAGE}
+    restart: always
+    environment:
+      DAGSTER_POSTGRES_HOST: ${DAGSTER_POSTGRES_HOST}
+      DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+      SOURCE_DB_HOST: ${SOURCE_DB_HOST}
+      SOURCE_DB_USER: ${SOURCE_DB_USER}
+      SOURCE_DB_PASSWORD: ${SOURCE_DB_PASSWORD}
+      SOURCE_DB_NAME: ${SOURCE_DB_NAME}
+      SOURCE_DB_PORT: ${SOURCE_DB_PORT}
+      WAREHOUSE_DB_HOST: ${WAREHOUSE_DB_HOST}
+      WAREHOUSE_DB_USER: ${WAREHOUSE_DB_USER}
+      WAREHOUSE_DB_PASSWORD: ${WAREHOUSE_DB_PASSWORD}
+      WAREHOUSE_DB_NAME: ${WAREHOUSE_DB_NAME}
+      WAREHOUSE_DB_PORT: ${WAREHOUSE_DB_PORT}
+      DAGSTER_CURRENT_IMAGE: ${DAGSTER_CURRENT_IMAGE}
+    volumes:
+      - ./dagster_code:/opt/dagster/app/dagster_code
+      - ./dagster_home:/opt/dagster/dagster_home
+    depends_on:
+      source_postgresql:
+        condition: service_healthy
+    networks:
+      - dagster-network
+    ports:
+      - "${DAGSTER_GRPC_PORT}:3001"
+    command: 
+      - "dagster"
+      - "api"
+      - "grpc"
+      - "-h"
+      - "0.0.0.0"
+      - "-p"
+      - "3001"
+      - "-m"
+      - "dagster_code"
+
+  # ============================================
+  # DAGSTER DAEMON
+  # ============================================
+  dagster_daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dagster_daemon
+    image: ${DAGSTER_CURRENT_IMAGE}
+    restart: always
+    environment:
+      DAGSTER_POSTGRES_HOST: ${DAGSTER_POSTGRES_HOST}
+      DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+    volumes:
+      - ./dagster_home:/opt/dagster/dagster_home
+      - ./logs:/opt/dagster/logs
+    depends_on:
+      source_postgresql:
+        condition: service_healthy
+      dagster_user_code:
+        condition: service_started
+    networks:
+      - dagster-network
+    command:
+      - "dagster-daemon"
+      - "run"
+      - "-w"
+      - "/opt/dagster/dagster_home/workspace.yaml"
+
+  # ============================================
+  # DAGSTER WEBSERVER (UI)
+  # ============================================
+  dagster_webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dagster_webserver
+    image: ${DAGSTER_CURRENT_IMAGE}
+    restart: always
+    environment:
+      DAGSTER_POSTGRES_HOST: ${DAGSTER_POSTGRES_HOST}
+      DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+    volumes:
+      - ./dagster_home:/opt/dagster/dagster_home
+      - ./logs:/opt/dagster/logs
+    depends_on:
+      source_postgresql:
+        condition: service_healthy
+      dagster_user_code:
+        condition: service_started
+    ports:
+      - "${DAGSTER_WEBSERVER_PORT}:3000"
+    networks:
+      - dagster-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/server_info || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command:
+      - "dagster-webserver"
+      - "-h"
+      - "0.0.0.0"
+      - "-p"
+      - "3000"
+      - "-w"
+      - "/opt/dagster/dagster_home/workspace.yaml"
+
+# ============================================
+# NETWORKS
+# ============================================
+networks:
+  dagster-network:
+    external: true
+    name: ${NETWORK_NAME:-dagster-openmetadata-net}
+
+# ============================================
+# VOLUMES
+# ============================================
+volumes:
+  source-postgres-data:
+    driver: local

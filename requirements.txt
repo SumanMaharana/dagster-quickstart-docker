@@ -1,0 +1,17 @@
+# Dagster and core dependencies
+dagster==1.6.3
+dagster-webserver==1.6.3
+dagster-postgres==0.22.3
+dagster-docker==0.22.3
+
+# Database drivers
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.25
+
+# Data processing
+pandas==2.1.4
+numpy==1.26.3
+
+# Utilities
+python-dotenv==1.0.0
+pyyaml==6.0.1

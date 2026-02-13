@@ -1,0 +1,8 @@
+# Workspace Configuration
+# This file is generated from workspace.yaml.template by scripts/generate-config.sh
+
+load_from:
+  - grpc_server:
+      host: dagster_user_code
+      port: 3001
+      location_name: "dagster_code_location"

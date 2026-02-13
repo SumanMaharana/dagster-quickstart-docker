@@ -1,0 +1,63 @@
+# Environment variables
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Dagster
+.dagster/
+dagster_home/
+*.db
+*.db-shm
+*.db-wal
+logs/
+storage/
+schedules/
+history/
+
+# Docker volumes
+postgres-data/
+dagster-postgres-data/
+source-postgres-data/
+warehouse-postgres-data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated configs
+dagster.yaml
+workspace.yaml

@@ -21,6 +21,7 @@ from dagster_code.resources import PostgresResource
 # ============================================
 
 @asset(
+    key=["postgres", "source", "customers"],
     group_name="source_data",
     description="Raw customer data from source database",
     metadata={
@@ -56,6 +57,7 @@ def raw_customers(context: AssetExecutionContext, source_db: PostgresResource) -
 
 
 @asset(
+    key=["postgres", "source", "products"],
     group_name="source_data",
     description="Raw product data from source database",
     metadata={
@@ -89,6 +91,7 @@ def raw_products(context: AssetExecutionContext, source_db: PostgresResource) ->
 
 
 @asset(
+    key=["postgres", "source", "orders"],
     group_name="source_data",
     description="Raw order data from source database",
     metadata={
@@ -131,9 +134,10 @@ def raw_orders(context: AssetExecutionContext, source_db: PostgresResource) -> p
 # ============================================
 
 @asset(
+    key=["postgres", "warehouse", "enriched_customers"],
     group_name="warehouse_data",
     description="Enriched customer data with derived fields",
-    ins={"raw_customers": AssetIn()},
+    ins={"raw_customers": AssetIn(key=["postgres", "source", "customers"])},
     metadata={
         "destination": "source_postgresql",
         "schema": "warehouse",
@@ -215,9 +219,10 @@ def enriched_customers(
 
 
 @asset(
+    key=["postgres", "warehouse", "enriched_products"],
     group_name="warehouse_data",
     description="Enriched product data with category analysis",
-    ins={"raw_products": AssetIn()},
+    ins={"raw_products": AssetIn(key=["postgres", "source", "products"])},
     metadata={
         "destination": "source_postgresql",
         "schema": "warehouse",
@@ -300,12 +305,13 @@ def enriched_products(
 
 
 @asset(
+    key=["postgres", "warehouse", "customer_order_summary"],
     group_name="warehouse_data",
     description="Customer order summary with aggregated metrics",
     ins={
-        "raw_customers": AssetIn(),
-        "raw_orders": AssetIn(),
-        "enriched_customers": AssetIn()
+        "raw_customers": AssetIn(key=["postgres", "source", "customers"]),
+        "raw_orders": AssetIn(key=["postgres", "source", "orders"]),
+        "enriched_customers": AssetIn(key=["postgres", "warehouse", "enriched_customers"])
     },
     metadata={
         "destination": "source_postgresql",
@@ -424,6 +430,7 @@ def customer_order_summary(
 # ============================================
 
 @asset(
+    key=["postgres", "source", "order_items"],
     group_name="order_analytics",
     description="Raw order items data from source database",
     metadata={
@@ -457,11 +464,12 @@ def raw_order_items(context: AssetExecutionContext, source_db: PostgresResource)
 
 
 @asset(
+    key=["postgres", "warehouse", "order_items_analytics"],
     group_name="order_analytics",
     description="Enriched order items with product and pricing analytics",
     ins={
-        "raw_order_items": AssetIn(),
-        "raw_products": AssetIn()
+        "raw_order_items": AssetIn(key=["postgres", "source", "order_items"]),
+        "raw_products": AssetIn(key=["postgres", "source", "products"])
     },
     metadata={
         "destination": "source_postgresql",
@@ -549,9 +557,10 @@ def order_items_analytics(
 
 
 @asset(
+    key=["postgres", "warehouse", "daily_sales_summary"],
     group_name="order_analytics",
     description="Daily sales summary aggregated by date",
-    ins={"raw_orders": AssetIn()},
+    ins={"raw_orders": AssetIn(key=["postgres", "source", "orders"])},
     metadata={
         "destination": "source_postgresql",
         "schema": "warehouse",
@@ -634,6 +643,7 @@ def daily_sales_summary(
 # ============================================
 
 @asset(
+    key=["postgres", "source", "product_sales_summary"],
     group_name="business_intelligence",
     description="Product sales performance data from source aggregated view",
     metadata={
@@ -669,6 +679,7 @@ def source_product_sales(context: AssetExecutionContext, source_db: PostgresReso
 
 
 @asset(
+    key=["postgres", "source", "customer_order_summary_view"],
     group_name="business_intelligence",
     description="Customer order summary data from source aggregated view",
     metadata={
@@ -705,9 +716,10 @@ def source_customer_orders(context: AssetExecutionContext, source_db: PostgresRe
 
 
 @asset(
+    key=["postgres", "warehouse", "product_performance_analytics"],
     group_name="business_intelligence",
     description="Product performance analytics with category insights",
-    ins={"source_product_sales": AssetIn()},
+    ins={"source_product_sales": AssetIn(key=["postgres", "source", "product_sales_summary"])},
     metadata={
         "destination": "source_postgresql",
         "schema": "warehouse",
@@ -808,9 +820,10 @@ def product_performance_analytics(
 
 
 @asset(
+    key=["postgres", "warehouse", "customer_lifetime_value"],
     group_name="business_intelligence",
     description="Customer lifetime value and segmentation analytics",
-    ins={"source_customer_orders": AssetIn()},
+    ins={"source_customer_orders": AssetIn(key=["postgres", "source", "customer_order_summary_view"])},
     metadata={
         "destination": "source_postgresql",
         "schema": "warehouse",
@@ -918,262 +931,11 @@ def customer_lifetime_value(
 
 
 # ============================================
-# HIERARCHICAL KEY ASSETS (Database.Schema.Table)
-# ============================================
-
-@asset(
-    key=["postgres", "source", "customers"],
-    group_name="hierarchical_pipeline",
-    description="Customers with hierarchical asset key: postgres.source.customers",
-    metadata={
-        "database": "postgres",
-        "schema": "source",
-        "table": "customers"
-    }
-)
-def postgres__source__customers(context: AssetExecutionContext, source_db: PostgresResource) -> pd.DataFrame:
-    """Extract customers with hierarchical key structure."""
-    context.log.info("Reading customers with hierarchical key...")
-    
-    with source_db.get_connection() as conn:
-        df = pd.read_sql("SELECT * FROM source.customers ORDER BY customer_id", conn)
-        
-        context.add_output_metadata({
-            "row_count": len(df),
-            "database": "postgres",
-            "schema": "source",
-            "table": "customers",
-            "asset_key_path": "postgres/source/customers"
-        })
-        
-    return df
-
-
-@asset(
-    key=["postgres", "source", "products"],
-    group_name="hierarchical_pipeline",
-    description="Products with hierarchical asset key: postgres.source.products",
-    metadata={
-        "database": "postgres",
-        "schema": "source",
-        "table": "products"
-    }
-)
-def postgres__source__products(context: AssetExecutionContext, source_db: PostgresResource) -> pd.DataFrame:
-    """Extract products with hierarchical key structure."""
-    context.log.info("Reading products with hierarchical key...")
-    
-    with source_db.get_connection() as conn:
-        df = pd.read_sql("SELECT * FROM source.products ORDER BY product_id", conn)
-        
-        context.add_output_metadata({
-            "row_count": len(df),
-            "database": "postgres",
-            "schema": "source",
-            "table": "products",
-            "asset_key_path": "postgres/source/products"
-        })
-        
-    return df
-
-
-@asset(
-    key=["postgres", "source", "orders"],
-    group_name="hierarchical_pipeline",
-    description="Orders with hierarchical asset key: postgres.source.orders",
-    metadata={
-        "database": "postgres",
-        "schema": "source",
-        "table": "orders"
-    }
-)
-def postgres__source__orders(context: AssetExecutionContext, source_db: PostgresResource) -> pd.DataFrame:
-    """Extract orders with hierarchical key structure."""
-    context.log.info("Reading orders with hierarchical key...")
-    
-    with source_db.get_connection() as conn:
-        df = pd.read_sql("SELECT * FROM source.orders ORDER BY order_id", conn)
-        
-        context.add_output_metadata({
-            "row_count": len(df),
-            "database": "postgres",
-            "schema": "source",
-            "table": "orders",
-            "asset_key_path": "postgres/source/orders"
-        })
-        
-    return df
-
-
-@asset(
-    key=["postgres", "warehouse", "customer_insights"],
-    ins={
-        "customers": AssetIn(key=["postgres", "source", "customers"]),
-        "orders": AssetIn(key=["postgres", "source", "orders"])
-    },
-    group_name="hierarchical_pipeline",
-    description="Customer insights with hierarchical asset key: postgres.warehouse.customer_insights",
-    metadata={
-        "database": "postgres",
-        "schema": "warehouse",
-        "table": "customer_insights"
-    }
-)
-def postgres__warehouse__customer_insights(
-    context: AssetExecutionContext,
-    warehouse_db: PostgresResource,
-    customers,
-    orders
-) -> pd.DataFrame:
-    """Create customer insights with hierarchical key structure."""
-    context.log.info("Creating customer insights with hierarchical key...")
-    
-    # Aggregate orders per customer
-    order_stats = orders.groupby('customer_id').agg({
-        'order_id': 'count',
-        'total_amount': ['sum', 'mean']
-    }).reset_index()
-    order_stats.columns = ['customer_id', 'order_count', 'total_spent', 'avg_order_value']
-    
-    # Merge with customer data
-    df = customers.merge(order_stats, on='customer_id', how='left')
-    df[['order_count', 'total_spent', 'avg_order_value']] = df[['order_count', 'total_spent', 'avg_order_value']].fillna(0)
-    
-    # Add insight categories
-    df['customer_tier'] = pd.cut(
-        df['total_spent'],
-        bins=[0, 200, 500, float('inf')],
-        labels=['Basic', 'Premium', 'Elite']
-    ).astype(str)
-    
-    context.log.info(f"Created insights for {len(df)} customers")
-    
-    # Write to warehouse
-    with warehouse_db.get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DROP TABLE IF EXISTS warehouse.customer_insights CASCADE")
-            cur.execute("""
-                CREATE TABLE warehouse.customer_insights (
-                    customer_id INTEGER PRIMARY KEY,
-                    first_name VARCHAR(100),
-                    last_name VARCHAR(100),
-                    email VARCHAR(255),
-                    order_count INTEGER,
-                    total_spent DECIMAL(12, 2),
-                    avg_order_value DECIMAL(10, 2),
-                    customer_tier VARCHAR(50),
-                    analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            cur.execute("""
-                CREATE INDEX idx_customer_insights_tier ON warehouse.customer_insights(customer_tier);
-            """)
-    
-    engine = warehouse_db.get_engine()
-    try:
-        df[['customer_id', 'first_name', 'last_name', 'email', 'order_count', 'total_spent', 'avg_order_value', 'customer_tier']].to_sql(
-            'customer_insights', engine, if_exists='append', index=False, chunksize=1000, schema='warehouse'
-        )
-    finally:
-        engine.dispose()
-    
-    context.add_output_metadata({
-        "row_count": len(df),
-        "database": "postgres",
-        "schema": "warehouse",
-        "table": "customer_insights",
-        "asset_key_path": "postgres/warehouse/customer_insights",
-        "tier_breakdown": MetadataValue.json(df['customer_tier'].value_counts().to_dict())
-    })
-    
-    return df
-
-
-@asset(
-    key=["postgres", "warehouse", "product_summary"],
-    ins={"products": AssetIn(key=["postgres", "source", "products"])},
-    group_name="hierarchical_pipeline",
-    description="Product summary with hierarchical asset key: postgres.warehouse.product_summary",
-    metadata={
-        "database": "postgres",
-        "schema": "warehouse",
-        "table": "product_summary"
-    }
-)
-def postgres__warehouse__product_summary(
-    context: AssetExecutionContext,
-    warehouse_db: PostgresResource,
-    products
-) -> pd.DataFrame:
-    """Create product summary with hierarchical key structure."""
-    context.log.info("Creating product summary with hierarchical key...")
-    
-    df = products.copy()
-    
-    # Add summary fields
-    df['stock_category'] = pd.cut(
-        df['stock_quantity'],
-        bins=[-1, 0, 10, 50, float('inf')],
-        labels=['Out of Stock', 'Critical', 'Low', 'Normal']
-    ).astype(str)
-    
-    df['price_category'] = pd.cut(
-        df['price'],
-        bins=[0, 25, 75, 150, float('inf')],
-        labels=['Budget', 'Economy', 'Standard', 'Premium']
-    ).astype(str)
-    
-    df['inventory_value'] = df['price'] * df['stock_quantity']
-    
-    context.log.info(f"Created summary for {len(df)} products")
-    
-    # Write to warehouse
-    with warehouse_db.get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DROP TABLE IF EXISTS warehouse.product_summary CASCADE")
-            cur.execute("""
-                CREATE TABLE warehouse.product_summary (
-                    product_id INTEGER PRIMARY KEY,
-                    product_name VARCHAR(255),
-                    category VARCHAR(100),
-                    price DECIMAL(10, 2),
-                    stock_quantity INTEGER,
-                    stock_category VARCHAR(50),
-                    price_category VARCHAR(50),
-                    inventory_value DECIMAL(15, 2),
-                    summarized_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            cur.execute("""
-                CREATE INDEX idx_product_summary_category ON warehouse.product_summary(category);
-                CREATE INDEX idx_product_summary_stock ON warehouse.product_summary(stock_category);
-            """)
-    
-    engine = warehouse_db.get_engine()
-    try:
-        df[['product_id', 'product_name', 'category', 'price', 'stock_quantity', 'stock_category', 'price_category', 'inventory_value']].to_sql(
-            'product_summary', engine, if_exists='append', index=False, chunksize=1000, schema='warehouse'
-        )
-    finally:
-        engine.dispose()
-    
-    context.add_output_metadata({
-        "row_count": len(df),
-        "database": "postgres",
-        "schema": "warehouse",
-        "table": "product_summary",
-        "asset_key_path": "postgres/warehouse/product_summary",
-        "total_inventory_value": f"${df['inventory_value'].sum():.2f}"
-    })
-    
-    return df
-
-
-# ============================================
 # SQL LINEAGE TRACKING PIPELINE
 # ============================================
 
 @asset(
+    key=["postgres", "warehouse", "customer_order_metrics"],
     group_name="sql_lineage",
     description="Customer orders with explicit SQL query for lineage tracking",
     metadata={
@@ -1270,6 +1032,7 @@ def customer_order_metrics(context: AssetExecutionContext, source_db: PostgresRe
 
 
 @asset(
+    key=["postgres", "warehouse", "product_sales_metrics"],
     group_name="sql_lineage",
     description="Product sales metrics with explicit SQL query for lineage tracking",
     metadata={
@@ -1371,6 +1134,7 @@ def product_sales_metrics(context: AssetExecutionContext, source_db: PostgresRes
 
 
 @asset(
+    key=["postgres", "warehouse", "daily_order_summary_sql"],
     group_name="sql_lineage",
     description="Daily order summary with INSERT...SELECT query for lineage tracking",
     metadata={

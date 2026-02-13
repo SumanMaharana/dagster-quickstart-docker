@@ -52,7 +52,11 @@ full_pipeline_job = define_asset_job(
 customer_pipeline_job = define_asset_job(
     name="customer_pipeline",
     description="Extract and enrich customer data only",
-    selection=AssetSelection.keys("raw_customers", "enriched_customers", "customer_order_summary"),
+    selection=AssetSelection.keys(
+        ["postgres", "source", "customers"],
+        ["postgres", "warehouse", "enriched_customers"],
+        ["postgres", "warehouse", "customer_order_summary"]
+    ),
     tags={
         "type": "partial_pipeline",
         "domain": "customers"
@@ -63,7 +67,10 @@ customer_pipeline_job = define_asset_job(
 product_pipeline_job = define_asset_job(
     name="product_pipeline",
     description="Extract and enrich product data only",
-    selection=AssetSelection.keys("raw_products", "enriched_products"),
+    selection=AssetSelection.keys(
+        ["postgres", "source", "products"],
+        ["postgres", "warehouse", "enriched_products"]
+    ),
     tags={
         "type": "partial_pipeline",
         "domain": "products"
@@ -74,7 +81,11 @@ product_pipeline_job = define_asset_job(
 warehouse_tables_job = define_asset_job(
     name="warehouse_tables",
     description="Materialize order analytics tables (order_items_analytics, daily_sales_summary)",
-    selection=AssetSelection.keys("raw_order_items", "order_items_analytics", "daily_sales_summary"),
+    selection=AssetSelection.keys(
+        ["postgres", "source", "order_items"],
+        ["postgres", "warehouse", "order_items_analytics"],
+        ["postgres", "warehouse", "daily_sales_summary"]
+    ),
     tags={
         "type": "warehouse_load",
         "schema": "warehouse",
@@ -88,10 +99,10 @@ bi_analytics_job = define_asset_job(
     name="bi_analytics",
     description="Business Intelligence: Product performance and customer LTV analytics",
     selection=AssetSelection.keys(
-        "source_product_sales",
-        "source_customer_orders",
-        "product_performance_analytics",
-        "customer_lifetime_value"
+        ["postgres", "source", "product_sales_summary"],
+        ["postgres", "source", "customer_order_summary_view"],
+        ["postgres", "warehouse", "product_performance_analytics"],
+        ["postgres", "warehouse", "customer_lifetime_value"]
     ),
     tags={
         "type": "bi_analytics",
@@ -101,34 +112,14 @@ bi_analytics_job = define_asset_job(
     }
 )
 
-# Job with hierarchical asset keys (database.schema.table)
-hierarchical_pipeline_job = define_asset_job(
-    name="hierarchical_pipeline",
-    description="Pipeline with hierarchical asset keys: postgres.schema.table structure",
-    selection=AssetSelection.keys(
-        ["postgres", "source", "customers"],
-        ["postgres", "source", "products"],
-        ["postgres", "source", "orders"],
-        ["postgres", "warehouse", "customer_insights"],
-        ["postgres", "warehouse", "product_summary"]
-    ),
-    tags={
-        "type": "hierarchical_pipeline",
-        "key_structure": "database.schema.table",
-        "source_schema": "postgres.source",
-        "destination_schema": "postgres.warehouse",
-        "source_tables": "postgres.source.customers,postgres.source.products,postgres.source.orders",
-        "destination_tables": "postgres.warehouse.customer_insights,postgres.warehouse.product_summary"
-    }
-)
 
 # SQL Lineage Tracking Job
 sql_lineage_job = define_asset_job(
     name="sql_lineage_tracking",
     selection=AssetSelection.keys(
-        "customer_order_metrics",
-        "product_sales_metrics",
-        "daily_order_summary_sql"
+        ["postgres", "warehouse", "customer_order_metrics"],
+        ["postgres", "warehouse", "product_sales_metrics"],
+        ["postgres", "warehouse", "daily_order_summary_sql"]
     ),
     description="Job demonstrating SQL query tracking for lineage extraction",
     tags={
@@ -199,7 +190,6 @@ all_jobs = [
     product_pipeline_job,
     warehouse_tables_job,
     bi_analytics_job,
-    hierarchical_pipeline_job,
     sql_lineage_job,
 ]
 
